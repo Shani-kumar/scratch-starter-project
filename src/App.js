@@ -14,11 +14,12 @@ export default function App() {
   const [activeSpriteId, setActiveSpriteId] = useState("sprite-1");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [spriteToDelete, setSpriteToDelete] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
 
   const activeSprite = sprites.find(s => s.id === activeSpriteId);
 
-  const addBlockToMidArea = (blockType) => {
+  const addBlockToMidArea = (blockType, insertIndex = null) => {
     let newBlock;
     switch (blockType) {
       case "MOTION_MOVE": newBlock = { type: blockType, steps: 10 }; break;
@@ -31,9 +32,28 @@ export default function App() {
       default: return;
     }
 
-    setSprites(sprites.map(s => {
+    setSprites(prevSprites => prevSprites.map(s => {
       if (s.id === activeSpriteId) {
-        return { ...s, blocks: [...s.blocks, newBlock] };
+        const newBlocks = [...s.blocks];
+        if (insertIndex !== null && insertIndex >= 0) {
+          newBlocks.splice(insertIndex, 0, newBlock);
+        } else {
+          newBlocks.push(newBlock);
+        }
+        return { ...s, blocks: newBlocks };
+      }
+      return s;
+    }));
+  };
+
+  const reorderBlocksInMidArea = (fromIndex, targetPosition) => {
+    setSprites(prevSprites => prevSprites.map(s => {
+      if (s.id === activeSpriteId) {
+        const newBlocks = [...s.blocks];
+        const [moved] = newBlocks.splice(fromIndex, 1);
+        const finalIndex = fromIndex < targetPosition ? targetPosition - 1 : targetPosition;
+        newBlocks.splice(finalIndex, 0, moved);
+        return { ...s, blocks: newBlocks };
       }
       return s;
     }));
@@ -75,6 +95,7 @@ export default function App() {
   };
 
   const addSprite = (type) => {
+    stopAll();
     const newId = `sprite-${Date.now()}`;
     const name = getNextSpriteName(type, sprites);
     setSprites([...sprites, {
@@ -125,11 +146,13 @@ export default function App() {
 
   const stopAll = () => {
     isPlayingRef.current = false;
+    setIsPlaying(false);
   };
 
   const runAllBlocks = async () => {
     if (isPlayingRef.current) return;
     isPlayingRef.current = true;
+    setIsPlaying(true);
 
     let execSprites = JSON.parse(JSON.stringify(sprites));
     let stateMachine = execSprites.map(() => ({ ip: 0, waitTicks: 0, cooldown: 0 }));
@@ -209,11 +232,13 @@ export default function App() {
 
       if (!anyActive) {
         isPlayingRef.current = false;
+        setIsPlaying(false);
         break;
       }
 
       await sleep(300);
     }
+    setIsPlaying(false);
   };
 
   const updateSpritePosition = (id, x, y) => {
@@ -225,33 +250,58 @@ export default function App() {
       <div className="h-screen overflow-hidden flex flex-row  ">
         <div className="flex-1 h-screen overflow-hidden flex flex-row bg-white border-t border-r border-gray-200 rounded-tr-xl mr-2">
           <Sidebar removeBlockFromMidArea={removeBlockFromMidArea} />
-          <MidArea midAreaBlocks={activeSprite ? activeSprite.blocks : []} addBlockToMidArea={addBlockToMidArea} updateBlockInMidArea={updateBlockInMidArea} />
+          <MidArea 
+            activeSprite={activeSprite}
+            midAreaBlocks={activeSprite ? activeSprite.blocks : []} 
+            addBlockToMidArea={addBlockToMidArea} 
+            updateBlockInMidArea={updateBlockInMidArea}
+            reorderBlocksInMidArea={reorderBlocksInMidArea}
+          />
         </div>
         <div className="w-1/3 h-screen overflow-hidden flex flex-col bg-white border-t border-l border-gray-200 rounded-tl-xl ml-2">
           <div className="p-2 border-b border-gray-200 flex justify-between items-center">
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                stopAll();
+                setIsModalOpen(true);
+              }}
               className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded text-sm"
             >
               + Add Sprite
             </button>
             <div className="flex space-x-2">
               <button
+                type="button"
                 onClick={stopAll}
-                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-4 rounded"
+                disabled={!isPlaying}
+                className={`font-bold py-1 px-4 rounded text-sm transition-all ${
+                  isPlaying 
+                    ? "bg-red-500 hover:bg-red-600 text-white shadow cursor-pointer" 
+                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
               >
                 Stop
               </button>
               <button
+                type="button"
                 onClick={runAllBlocks}
-                className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-4 rounded"
+                disabled={isPlaying}
+                className={`font-bold py-1 px-4 rounded text-sm transition-all ${
+                  isPlaying 
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+                    : "bg-green-500 hover:bg-green-600 text-white shadow cursor-pointer"
+                }`}
               >
-                Play
+                {isPlaying ? "Playing..." : "Play"}
               </button>
             </div>
           </div>
           <div className="flex-1 relative border-b border-gray-200">
-            <PreviewArea sprites={sprites} updateSpritePosition={updateSpritePosition} />
+            <PreviewArea 
+              sprites={sprites} 
+              setActiveSpriteId={setActiveSpriteId}
+              updateSpritePosition={updateSpritePosition} 
+            />
           </div>
           <div className="h-1/4 p-2 overflow-y-auto bg-gray-50">
             <h3 className="font-bold mb-2 text-sm text-gray-600">Sprites</h3>
@@ -295,8 +345,14 @@ export default function App() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl w-[500px] shadow-2xl relative">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-white p-6 rounded-xl w-[500px] shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-black font-bold text-xl"
               onClick={() => setIsModalOpen(false)}

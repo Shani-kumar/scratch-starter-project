@@ -1,13 +1,30 @@
-import React from "react";
+import React, { useState } from "react";
 import Icon from "./Icon";
 
-export default function MidArea({ midAreaBlocks, addBlockToMidArea, updateBlockInMidArea }) {
+export default function MidArea({ 
+  activeSprite, 
+  midAreaBlocks = [], 
+  addBlockToMidArea, 
+  updateBlockInMidArea, 
+  reorderBlocksInMidArea 
+}) {
+  const [dropIndicator, setDropIndicator] = useState(null);
+
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
+    setDropIndicator(null);
+    const sourceIndexStr = e.dataTransfer.getData("midAreaIndex");
+    if (sourceIndexStr !== "") {
+      const sourceIndex = parseInt(sourceIndexStr, 10);
+      if (!isNaN(sourceIndex) && reorderBlocksInMidArea) {
+        reorderBlocksInMidArea(sourceIndex, midAreaBlocks.length);
+      }
+      return;
+    }
     const blockType = e.dataTransfer.getData("blockType");
     if (blockType) {
       addBlockToMidArea(blockType);
@@ -16,6 +33,41 @@ export default function MidArea({ midAreaBlocks, addBlockToMidArea, updateBlockI
 
   const handleDragStart = (e, index) => {
     e.dataTransfer.setData("removeIndex", index);
+    e.dataTransfer.setData("midAreaIndex", index);
+  };
+
+  const handleItemDragOver = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isBottom = (e.clientY - rect.top) > (rect.height / 2);
+    const position = isBottom ? "bottom" : "top";
+    if (!dropIndicator || dropIndicator.index !== index || dropIndicator.position !== position) {
+      setDropIndicator({ index, position });
+    }
+  };
+
+  const handleItemDrop = (e, targetIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const position = dropIndicator ? dropIndicator.position : "top";
+    setDropIndicator(null);
+
+    const sourceIndexStr = e.dataTransfer.getData("midAreaIndex");
+    if (sourceIndexStr !== "") {
+      const fromIndex = parseInt(sourceIndexStr, 10);
+      if (!isNaN(fromIndex) && reorderBlocksInMidArea) {
+        const targetPosition = position === "bottom" ? targetIndex + 1 : targetIndex;
+        reorderBlocksInMidArea(fromIndex, targetPosition);
+      }
+      return;
+    }
+
+    const blockType = e.dataTransfer.getData("blockType");
+    if (blockType) {
+      const targetPosition = position === "bottom" ? targetIndex + 1 : targetIndex;
+      addBlockToMidArea(blockType, targetPosition);
+    }
   };
 
   const handleNumberChange = (index, block, field, val) => {
@@ -146,17 +198,45 @@ export default function MidArea({ midAreaBlocks, addBlockToMidArea, updateBlockI
 
   return (
     <div
-      className="flex-1 h-full overflow-auto p-4"
+      className="flex-1 h-full overflow-auto p-4 flex flex-col"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className={`w-full min-h-[300px] border-2 border-dashed border-gray-300 py-8 px-4 rounded flex flex-col ${midAreaBlocks.length === 0 ? 'items-center justify-center' : ''}`}>
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Target Sprite:</span>
+          <span className="font-bold text-sm text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
+            {activeSprite ? (activeSprite.name || activeSprite.type) : "None (Add/Select a Sprite)"}
+          </span>
+        </div>
+        <span className="text-xs text-gray-400 italic">
+          Drag blocks to reorder
+        </span>
+      </div>
+
+      <div className={`w-full flex-1 min-h-[300px] border-2 border-dashed border-gray-300 py-6 px-4 rounded flex flex-col ${midAreaBlocks.length === 0 ? 'items-center justify-center' : ''}`}>
         {midAreaBlocks.length === 0 ? (
           <div className="text-gray-400 font-medium">
             {"Drag and drop actions here"}
           </div>
         ) : (
-          midAreaBlocks.map((block, index) => renderBlock(block, index))
+          midAreaBlocks.map((block, index) => (
+            <div
+              key={index}
+              onDragOver={(e) => handleItemDragOver(e, index)}
+              onDragLeave={() => setDropIndicator(null)}
+              onDrop={(e) => handleItemDrop(e, index)}
+              className={`relative transition-all duration-150 ${
+                dropIndicator?.index === index && dropIndicator?.position === "top"
+                  ? "border-t-4 border-yellow-400 pt-1"
+                  : dropIndicator?.index === index && dropIndicator?.position === "bottom"
+                  ? "border-b-4 border-yellow-400 pb-1"
+                  : ""
+              }`}
+            >
+              {renderBlock(block, index)}
+            </div>
+          ))
         )}
       </div>
     </div>

@@ -4,7 +4,11 @@ import BeetleSprite from "./BeetleSprite";
 import DogSprite from "./DogSprite";
 import RobotSprite from "./RobotSprite";
 
-export default function PreviewArea({ sprites = [], updateSpritePosition }) {
+export default function PreviewArea({
+  sprites = [],
+  setActiveSpriteId,
+  updateSpritePosition
+}) {
   const getSpriteComponent = (type) => {
     switch (type) {
       case "beetle": return <BeetleSprite />;
@@ -40,6 +44,9 @@ export default function PreviewArea({ sprites = [], updateSpritePosition }) {
   };
 
   const handleDragStart = (e, id) => {
+    if (setActiveSpriteId) {
+      setActiveSpriteId(id);
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const offsetX = e.clientX - rect.left - (rect.width / 2);
     const offsetY = e.clientY - rect.top - (rect.height / 2);
@@ -58,8 +65,9 @@ export default function PreviewArea({ sprites = [], updateSpritePosition }) {
         <div
           key={spriteState.id}
           draggable
+          onClick={() => setActiveSpriteId && setActiveSpriteId(spriteState.id)}
           onDragStart={(e) => handleDragStart(e, spriteState.id)}
-          className="cursor-move"
+          className="cursor-move select-none"
           style={{
             position: "absolute",
             top: "50%",
